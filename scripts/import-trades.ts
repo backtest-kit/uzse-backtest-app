@@ -4,10 +4,10 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
+import "../config/setup";
 import { TradeModel } from "../schema/Trade.schema";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/backtest";
 const TMP_DIR = path.join(__dirname, "../tmp");
 
 const RU_MONTHS: Record<string, number> = {
@@ -26,11 +26,12 @@ function parseNumber(text: string): number {
   return parseFloat(text.replace(/\s/g, "").replace(",", ".")) || 0;
 }
 
-function parseHtmlTable(html: string) {
+function parseHtmlTable(html: string, pageIndex: number) {
   const rows: object[] = [];
   const trRegex = /<tr[\s\S]*?<\/tr>/gi;
   const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
   const tagRegex = /<[^>]+>/g;
+  let rowIndex = 0;
 
   let trMatch: RegExpExecArray | null;
   while ((trMatch = trRegex.exec(html)) !== null) {
@@ -52,9 +53,10 @@ function parseHtmlTable(html: string) {
     const volume = parseNumber(volumeParts[volumeParts.length - 1] ?? "");
     const hash = crypto
       .createHash("sha1")
-      .update(`${symbol}|${time?.toISOString()}|${tradePrice}|${quantity}|${volume}`)
+      .update(`${symbol}|${time?.toISOString()}|${tradePrice}|${quantity}|${volume}|${pageIndex}|${rowIndex}`)
       .digest("hex");
 
+    rowIndex++;
     rows.push({ time, symbol, issuer: cells[3], securityType: cells[4], market: cells[5], platform: cells[6], tradePrice, quantity, volume, hash });
   }
   return rows.filter((r: any) => r.time !== null);
@@ -76,7 +78,7 @@ async function main() {
 
   console.log(`Found ${files.length} file(s)`);
 
-  await mongoose.connect(MONGO_URI);
+  await mongoose.connection.asPromise();
   console.log("MongoDB connected");
 
   let inserted = 0;
@@ -84,7 +86,8 @@ async function main() {
 
   for (const file of files) {
     const html = fs.readFileSync(path.join(TMP_DIR, file), "utf8");
-    const rows = parseHtmlTable(html);
+    const pageIndex = parseInt(file.match(/(\d+)/)?.[1] ?? "0");
+    const rows = parseHtmlTable(html, pageIndex);
     console.log(`${file}: ${rows.length} rows`);
 
     for (const doc of rows) {

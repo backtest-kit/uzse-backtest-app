@@ -21,6 +21,9 @@ async function main() {
   }
 
   fs.mkdirSync(TMP_DIR, { recursive: true });
+  fs.readdirSync(TMP_DIR)
+    .filter((f) => f.endsWith(".html"))
+    .forEach((f) => fs.rmSync(path.join(TMP_DIR, f)));
 
   const buildUrl = (p: number) =>
     `https://uzse.uz/trade_results?begin=${begin}&end=${end}&mkt_id=${mktId}&page=${p}&search_key=${symbol}`;
