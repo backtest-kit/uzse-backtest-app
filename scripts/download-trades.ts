@@ -1,6 +1,6 @@
 // Usage: npx tsx scripts/download-trades.ts <symbol> <begin> <end> [mktId]
 // Example: npx tsx scripts/download-trades.ts UZ7011340005 17.04.2026 18.04.2026
-import { chromium } from "playwright";
+import { chromium, type Page } from "playwright";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -8,9 +8,29 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TMP_DIR = path.join(__dirname, "../tmp");
 
+const TIMEOUT = 30_000;
+const RETRIES = 10;
+const RETRY_DELAY = 30_000;
+
 function getLastPage(html: string): number {
   const match = html.match(/class="last next">\s*<a[^>]+[?&](?:amp;)?page=(\d+)/);
   return match ? parseInt(match[1], 10) : 1;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchPage(page: Page, url: string, attempt = 1): Promise<string> {
+  try {
+    await page.goto(url, { waitUntil: "networkidle", timeout: TIMEOUT });
+    return await page.content();
+  } catch (e) {
+    if (attempt >= RETRIES) throw e;
+    console.warn(`\nTimeout on ${url}, retry ${attempt}/${RETRIES - 1}...`);
+    await sleep(RETRY_DELAY);
+    return fetchPage(page, url, attempt + 1);
+  }
 }
 
 async function main() {
@@ -31,16 +51,14 @@ async function main() {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
 
-  await page.goto(buildUrl(1), { waitUntil: "networkidle", timeout: 30000 });
-  const firstHtml = await page.content();
+  const firstHtml = await fetchPage(page, buildUrl(1));
   fs.writeFileSync(path.join(TMP_DIR, "trades_page_1.html"), firstHtml, "utf8");
 
   const totalPages = getLastPage(firstHtml);
   console.log(`Total pages: ${totalPages}`);
 
   for (let p = 2; p <= totalPages; p++) {
-    await page.goto(buildUrl(p), { waitUntil: "networkidle", timeout: 30000 });
-    const html = await page.content();
+    const html = await fetchPage(page, buildUrl(p));
     fs.writeFileSync(path.join(TMP_DIR, `trades_page_${p}.html`), html, "utf8");
     console.log(`Downloaded page ${p}/${totalPages}`);
   }
