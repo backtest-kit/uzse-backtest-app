@@ -87,3 +87,10 @@ require('fs').mkdirSync('./scripts/linux', { recursive: true });
 require('fs').writeFileSync('./scripts/linux/fetch.sh', lines.join('\n'), 'utf8');
 console.log('Done, lines:', lines.length);
 ```
+
+## Импорт свечей в mongodb
+
+```bash
+mongoimport --db backtest --collection trade-results --file backtest.trade-results.json --jsonArray
+mongoimport --db backtest --collection candle-items  --file backtest.candle-items.json  --jsonArray
+```
