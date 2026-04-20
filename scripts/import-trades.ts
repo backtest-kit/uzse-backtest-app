@@ -26,12 +26,10 @@ function parseNumber(text: string): number {
   return parseFloat(text.replace(/\s/g, "").replace(",", ".")) || 0;
 }
 
-function extractPageUrl(html: string): string {
+function extractUrlKey(html: string): string {
   const match = html.match(/href="(\/trade_results\?[^"]+)"/);
   if (!match) return "";
-  const url = match[1].replace(/&amp;/g, "&");
-  // keep only begin, end, search_key — strip page number
-  const params = new URLSearchParams(url.split("?")[1]);
+  const params = new URLSearchParams(match[1].replace(/&amp;/g, "&").split("?")[1]);
   return `${params.get("begin")}|${params.get("end")}|${params.get("search_key")}`;
 }
 
@@ -41,8 +39,7 @@ function parseHtmlTable(html: string, pageIndex: number) {
   const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
   const tagRegex = /<[^>]+>/g;
   let rowIndex = 0;
-
-  const urlKey = extractPageUrl(html);
+  const urlKey = extractUrlKey(html);
 
   let trMatch: RegExpExecArray | null;
   while ((trMatch = trRegex.exec(html)) !== null) {
@@ -64,7 +61,7 @@ function parseHtmlTable(html: string, pageIndex: number) {
     const volume = parseNumber(volumeParts[volumeParts.length - 1] ?? "");
     const hash = crypto
       .createHash("sha1")
-      .update(`${urlKey}|${pageIndex}|${rowIndex}`)
+      .update(`${symbol}|${time?.toISOString()}|${tradePrice}|${quantity}|${volume}|${pageIndex}|${rowIndex}|${urlKey}`)
       .digest("hex");
 
     rowIndex++;
