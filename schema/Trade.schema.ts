@@ -19,7 +19,7 @@ interface ITradeDto {
   quantity: number;
   /** Объём сделки в UZS (tradePrice * quantity) */
   volume: number;
-  /** SHA1 от symbol|time|tradePrice|quantity|volume|pageIndex|rowIndex — уникальный ключ для идемпотентного импорта */
+  /** SHA1 от symbol|time|tradePrice|quantity|volume|pageIndex|rowIndex|query_begin|query_end|query_search_key — уникальный ключ для идемпотентного импорта */
   hash: string;
 }
 
