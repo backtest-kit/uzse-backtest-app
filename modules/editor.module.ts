@@ -1,31 +1,20 @@
 import { addExchangeSchema } from "backtest-kit";
-import { singleshot } from "functools-kit";
-import ccxt from "ccxt";
+import { CandleModel } from "../schema/Candle.schema";
 
-const getExchange = singleshot(async () => {
-  const exchange = new ccxt.binance({
-    options: {
-      defaultType: "spot",
-      adjustForTimeDifference: true,
-      recvWindow: 60000,
-    },
-    enableRateLimit: true,
-  });
-  await exchange.loadMarkets();
-  return exchange;
-});
+import "../config/setup";
 
 addExchangeSchema({
-  exchangeName: "ccxt-exchange",
+  exchangeName: "mongo-exchange",
   getCandles: async (symbol, interval, since, limit) => {
-    const exchange = await getExchange();
-    const candles = await exchange.fetchOHLCV(
-      symbol,
-      interval,
-      since.getTime(),
-      limit,
-    );
-    return candles.map(([timestamp, open, high, low, close, volume]) => ({
+    const candles = await CandleModel.find(
+      { symbol, interval, timestamp: { $gte: since.getTime() } },
+      { timestamp: 1, open: 1, high: 1, low: 1, close: 1, volume: 1, _id: 0 }
+    )
+      .sort({ timestamp: 1 })
+      .limit(limit)
+      .lean();
+
+    return candles.map(({ timestamp, open, high, low, close, volume }) => ({
       timestamp,
       open,
       high,
