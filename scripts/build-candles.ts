@@ -26,8 +26,7 @@ const TIMEFRAMES: { interval: string; minutes: number }[] = [
 type OHLCV = { open: number; high: number; low: number; close: number; volume: number };
 
 function floorTo(tsMs: number, minutes: number): number {
-  const periodMs = minutes * MIN_MS;
-  return Math.floor(tsMs / periodMs) * periodMs;
+  return Math.floor(tsMs / (minutes * MIN_MS)) * (minutes * MIN_MS);
 }
 
 async function bulkInsert(candles: object[], label: string) {
@@ -53,16 +52,16 @@ async function main() {
   await mongoose.connection.asPromise();
   console.log("MongoDB connected");
 
-  const trades = await TradeModel.find({ symbol: isin }, { time: 1, tradePrice: 1, quantity: 1 })
-    .sort({ time: 1 })
-    .lean();
-
-  console.log(`Loaded ${trades.length} trades for ${isin}`);
-
-  // Step 1: aggregate real 1m minutes from trades
+  // Step 1: aggregate real 1m minutes via async cursor
   const minuteMap = new Map<number, OHLCV>();
 
-  for (const t of trades) {
+  const cursor = TradeModel
+    .find({ symbol: isin }, { time: 1, tradePrice: 1, quantity: 1 })
+    .sort({ time: 1 })
+    .lean()
+    .cursor();
+
+  for await (const t of cursor) {
     const ts = floorTo(new Date(t.time).getTime(), 1);
     const existing = minuteMap.get(ts);
     if (!existing) {
@@ -79,36 +78,34 @@ async function main() {
 
   // Step 2: determine full range (day boundaries)
   const allTs = [...minuteMap.keys()].sort((a, b) => a - b);
-  const startDay = new Date(allTs[0]);
-  startDay.setHours(0, 0, 0, 0);
-  const endDay = new Date(allTs[allTs.length - 1]);
-  endDay.setHours(23, 59, 0, 0);
-  const startMs = startDay.getTime();
-  const endMs   = endDay.getTime();
+  const startMs = new Date(allTs[0]).setHours(0, 0, 0, 0);
+  const endMs   = new Date(allTs[allTs.length - 1]).setHours(23, 59, 0, 0);
 
-  // Step 3: build continuous 1m series with gap-fill
-  const filled1m: (OHLCV & { timestamp: number })[] = [];
-  let lastClose = minuteMap.get(allTs[0])!.open;
+  // minuteMap no longer needed — free memory before the main loop
+  const firstOpen = minuteMap.get(allTs[0])!.open;
+  minuteMap.clear();
+
+  // Step 3+4: walk 1m series, aggregate all timeframes simultaneously
+  const tfMaps = new Map<string, Map<number, OHLCV>>(
+    TIMEFRAMES.map(({ interval }) => [interval, new Map()])
+  );
+
+  let lastClose = firstOpen;
 
   for (let ts = startMs; ts <= endMs; ts += MIN_MS) {
     const real = minuteMap.get(ts);
-    if (real) {
-      lastClose = real.close;
-      filled1m.push({ timestamp: ts, ...real });
-    } else {
-      filled1m.push({ timestamp: ts, open: lastClose, high: lastClose, low: lastClose, close: lastClose, volume: 0 });
-    }
-  }
+    const c: OHLCV = real
+      ? { ...real }
+      : { open: lastClose, high: lastClose, low: lastClose, close: lastClose, volume: 0 };
 
-  // Step 4: for each timeframe — aggregate from filled1m and insert
-  for (const { interval, minutes } of TIMEFRAMES) {
-    const tfMap = new Map<number, OHLCV>();
+    if (real) lastClose = real.close;
 
-    for (const c of filled1m) {
-      const ts = floorTo(c.timestamp, minutes);
-      const existing = tfMap.get(ts);
+    for (const { interval, minutes } of TIMEFRAMES) {
+      const tfTs = floorTo(ts, minutes);
+      const tfMap = tfMaps.get(interval)!;
+      const existing = tfMap.get(tfTs);
       if (!existing) {
-        tfMap.set(ts, { open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume });
+        tfMap.set(tfTs, { ...c });
       } else {
         existing.high    = Math.max(existing.high, c.high);
         existing.low     = Math.min(existing.low, c.low);
@@ -116,7 +113,11 @@ async function main() {
         existing.volume += c.volume;
       }
     }
+  }
 
+  // Step 5: insert each timeframe
+  for (const { interval } of TIMEFRAMES) {
+    const tfMap = tfMaps.get(interval)!;
     const candles = [...tfMap.entries()]
       .sort(([a], [b]) => a - b)
       .map(([timestamp, ohlcv]) => ({ symbol, interval, timestamp, ...ohlcv }));
