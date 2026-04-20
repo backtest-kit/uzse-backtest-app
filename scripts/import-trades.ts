@@ -114,6 +114,11 @@ async function main() {
 
   await mongoose.disconnect();
   console.log(`Done. Inserted: ${inserted}, skipped (duplicates): ${skipped}`);
+
+  fs.readdirSync(TMP_DIR)
+    .filter((f) => f.endsWith(".html"))
+    .forEach((f) => fs.rmSync(path.join(TMP_DIR, f)));
+  console.log("Tmp cleaned.");
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
