@@ -1,5 +1,7 @@
 # Руководство
 
+![screenshot](./assets/screenshot.png)
+
 ## Скачать историю сделок
 
 ```bash
