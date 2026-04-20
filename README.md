@@ -59,3 +59,31 @@ npx tsx scripts/build-candles.ts HMKB UZ7011340005
 
 Уникальный индекс `{ symbol, interval, timestamp }` в коллекции `candle-items` гарантирует,  
 что повторный запуск скрипта не создаёт дублей — уже существующие свечи пропускаются.
+
+## Последовательность для парсера
+
+```js
+const lines = ['#!/bin/bash', 'cd \"\$(dirname \"\$0\")/../..\"', ''];
+const start = new Date(2018, 1, 1);
+const end = new Date(2026, 3, 1);
+let d = new Date(start);
+while (d <= end) {
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  const isFirstMonth = (y === 2018 && m === 1);
+  const isLastMonth  = (y === 2026 && m === 3);
+  const beginDay = isFirstMonth ? '08' : '01';
+  const lastDay  = new Date(y, m + 1, 0).getDate();
+  const endDay   = isLastMonth ? '20' : lastDay;
+  const mm = String(m + 1).padStart(2, '0');
+  const beginStr = String(beginDay).padStart(2,'0') + '.' + mm + '.' + y;
+  const endStr   = String(endDay).padStart(2,'0')   + '.' + mm + '.' + y;
+  lines.push('npx -y tsx scripts/download-trades.ts UZ7011340005 ' + beginStr + ' ' + endStr);
+  lines.push('npx -y tsx scripts/import-trades.ts');
+  lines.push('');
+  d.setMonth(m + 1);
+}
+require('fs').mkdirSync('./scripts/linux', { recursive: true });
+require('fs').writeFileSync('./scripts/linux/fetch.sh', lines.join('\n'), 'utf8');
+console.log('Done, lines:', lines.length);
+```
