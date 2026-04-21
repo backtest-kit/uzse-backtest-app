@@ -1,74 +1,79 @@
-# Руководство
+# uzse-backtest-app
 
 ![screenshot](./assets/screenshot.png)
 
-## Скачать историю сделок
+## Articles
+
+- [RU: Running Pine Script on Exchanges Without TradingView](./article/RU.md)
+- [EN: Running Pine Script on Exchanges Without TradingView](./article/EN.md)
+
+## Download Trade History
 
 ```bash
 npx tsx scripts/download-trades.ts UZ7011340005 01.03.2026 31.03.2026
 ```
 
-## Импортировать сделки в MongoDb
+## Import Trades into MongoDB
 
 ```bash
 npx tsx scripts/import-trades.ts
 ```
 
-## Узнать по каким дням не работала биржа
+## Check Which Days the Exchange Was Closed
 
 ```bash
 npx tsx scripts/check-gaps.ts
 ```
 
-## Создать японские свечи из дампа торгов
+## Build Japanese Candlesticks from Trade Dump
 
 ```bash
 npx tsx scripts/build-candles.ts HMKB UZ7011340005
 ```
 
-## Запуск редактора
+## Start the Editor
 
 ```bash
 npm start
 ```
 
-## Алгоритм построения свечей
+## Candle Building Algorithm
 
-### 1. Агрегация реальных минут
+### 1. Aggregating Real Minutes
 
-Каждая сделка из коллекции `trade-results` попадает в минутный бакет по правилу `floor(time, 1m)`.  
-Внутри бакета:
-- `open` — цена первой сделки
-- `high` / `low` — максимальная / минимальная цена
-- `close` — цена последней сделки
-- `volume` — сумма `quantity` (количество бумаг)
+Each trade from the `trade-results` collection is placed into a 1-minute bucket using `floor(time, 1m)`.  
+Within a bucket:
+- `open` — price of the first trade
+- `high` / `low` — maximum / minimum price
+- `close` — price of the last trade
+- `volume` — sum of `quantity` (number of securities)
 
-### 2. Заполнение пропусков внутри дня
+### 2. Filling Intraday Gaps
 
-Генерируется непрерывный ряд с шагом 1 минута от `00:00` до `23:59` каждого дня.  
-Минуты без сделок заполняются: `OHLC = close` предыдущей свечи, `volume = 0`.
+A continuous series is generated with a 1-minute step from `00:00` to `23:59` for each day.  
+Minutes with no trades are filled with: `OHLC = close` of the previous candle, `volume = 0`.
 
-### 3. Заполнение нерабочих дней
+### 3. Filling Non-Trading Days
 
-Выходные и праздники (дни полностью без сделок) заполняются аналогично:  
-все 1440 минут дня получают `OHLC = close` последнего торгового дня, `volume = 0`.
+Weekends and holidays (days with no trades at all) are filled similarly:  
+all 1440 minutes of the day receive `OHLC = close` of the last trading day, `volume = 0`.
 
-### 4. Агрегация старших таймфреймов
+### 4. Aggregating Higher Timeframes
 
-Старшие таймфреймы строятся из уже заполненного 1m ряда путём группировки по `floor(timestamp, N минут)`:
-- `open` — берётся из первой 1m свечи периода
-- `high` / `low` — max / min по всем 1m свечам периода
-- `close` — из последней 1m свечи периода
-- `volume` — сумма volume всех 1m свечей периода
+Higher timeframes are built from the already-filled 1m series by grouping via `floor(timestamp, N minutes)`:
+- `open` — taken from the first 1m candle of the period
+- `high` / `low` — max / min across all 1m candles in the period
+- `close` — from the last 1m candle of the period
+- `volume` — sum of volume across all 1m candles in the period
 
-Поддерживаемые таймфреймы: `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `8h`, `1d`.
+Supported timeframes: `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `8h`, `1d`.
 
-### 5. Идемпотентность
+### 5. Idempotency
 
-Уникальный индекс `{ symbol, interval, timestamp }` в коллекции `candle-items` гарантирует,  
-что повторный запуск скрипта не создаёт дублей — уже существующие свечи пропускаются.
+The unique index `{ symbol, interval, timestamp }` on the `candle-items` collection ensures  
+that re-running the script does not create duplicates — existing candles are skipped.
 
-## Последовательность для парсера
+## Parser Sequence Script
 
 ```js
 const lines = ['#!/bin/bash', 'cd \"\$(dirname \"\$0\")/../..\"', ''];
@@ -96,7 +101,7 @@ require('fs').writeFileSync('./scripts/linux/fetch.sh', lines.join('\n'), 'utf8'
 console.log('Done, lines:', lines.length);
 ```
 
-## Импорт свечей в mongodb
+## Import Candles into MongoDB
 
 ```bash
 mongoimport --db backtest --collection trade-results --file backtest.trade-results.json --jsonArray
