@@ -26,6 +26,12 @@ npx tsx scripts/check-gaps.ts
 npx tsx scripts/build-candles.ts HMKB UZ7011340005
 ```
 
+## Запуск редактора
+
+```bash
+npm start
+```
+
 ## Алгоритм построения свечей
 
 ### 1. Агрегация реальных минут
