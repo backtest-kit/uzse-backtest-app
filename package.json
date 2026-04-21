@@ -5,7 +5,7 @@
   "main": "index.js",
   "homepage": "https://backtest-kit.github.io/documents/article_07_ai_news_trading_signals.html",
   "scripts": {
-    "start": "node ./node_modules/@backtest-kit/cli/build/index.mjs"
+    "start": "node ./node_modules/@backtest-kit/cli/build/index.mjs --editor"
   },
   "keywords": [],
   "author": "",
